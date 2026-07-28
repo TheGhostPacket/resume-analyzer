@@ -85,6 +85,12 @@ tier, and without creating an account on a third-party uptime service.
 - **The AI never edits the match score or invents experience** -- the
   system prompt in `ai.py` explicitly forbids inventing skills; it can
   only rephrase what's already in the resume.
+- **Two AI providers with fallback** -- Gemini is tried first (its free
+  tier -- 1,000 requests/day -- easily covers demo traffic), and OpenAI
+  is only called if Gemini's request fails for any reason (quota, key
+  issue, network blip). Set `GEMINI_API_KEY` and, optionally,
+  `OPENAI_API_KEY` as a safety net. If you only set one, that's fine --
+  the other is simply skipped.
 - **Dash style (`-` not `—`) is enforced twice**: once via prompt
   instruction, once via a deterministic `.replace()` pass in code after
   the AI responds -- prompting alone isn't reliable enough for a rule
