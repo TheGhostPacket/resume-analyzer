@@ -18,7 +18,9 @@ import io
 
 from file_parsing import parse_resume
 from analysis import compute_match
-from ai import analyze_with_llm
+from resume_strength import check_resume_strength
+from ats_check import check_ats_formatting
+from ai import analyze_with_llm, generate_cover_letter
 from export import build_docx, build_pdf
 
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +65,40 @@ def health_ai():
     }
 
 
+@app.post("/check-strength")
+@limiter.limit("10/2hours")
+async def check_strength(request: Request, resume: UploadFile = File(...)):
+    """
+    Stands entirely on its own -- no job description needed. Flags weak,
+    vague, or unquantified bullets so the person can strengthen their
+    resume in general, before applying anywhere specific. Purely
+    rule-based (see resume_strength.py) -- no AI call, so it's free,
+    instant, and every flag is explainable.
+    """
+    file_bytes = await resume.read()
+    try:
+        resume_text = parse_resume(resume.filename, file_bytes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    result = check_resume_strength(resume_text)
+    return JSONResponse(result)
+
+
+@app.post("/check-ats")
+@limiter.limit("10/2hours")
+async def check_ats(request: Request, resume: UploadFile = File(...)):
+    """
+    Also stands entirely on its own -- inspects the FILE STRUCTURE (not
+    content) for layout patterns that commonly break real ATS parsers:
+    tables, multi-column layout, embedded images, header/footer-only
+    text. See ats_check.py for exactly what's checked and why.
+    """
+    file_bytes = await resume.read()
+    result = check_ats_formatting(resume.filename, file_bytes)
+    return JSONResponse(result)
+
+
 @app.post("/analyze")
 @limiter.limit("5/2hours")
 async def analyze(
@@ -98,29 +134,56 @@ async def analyze(
     return JSONResponse({
         **match_result,
         **ai_result,
+        "resume_text": resume_text,  # needed for inline keyword highlighting
     })
+
+
+@app.post("/cover-letter")
+@limiter.limit("5/2hours")
+async def cover_letter(
+    request: Request,
+    resume: UploadFile = File(...),
+    job_description: str = Form(...),
+):
+    if not job_description or len(job_description.strip()) < 20:
+        raise HTTPException(400, "Please paste a fuller job description.")
+
+    file_bytes = await resume.read()
+    try:
+        resume_text = parse_resume(resume.filename, file_bytes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    try:
+        result = generate_cover_letter(resume_text, job_description)
+    except Exception as e:
+        logger.exception(f"Cover letter AI call failed: {e}")
+        raise HTTPException(503, "Cover letter generation is temporarily unavailable -- try again shortly.")
+
+    return JSONResponse(result)
 
 
 class ExportRequest(BaseModel):
     title: str = "Tailored Resume Section"
     bullets: list[str]
     format: str  # "docx" or "pdf"
+    style: str = "bullets"  # "bullets" or "letter"
 
 
 @app.post("/export")
 @limiter.limit("20/2hours")
 async def export(request: Request, body: ExportRequest):
     if not body.bullets:
-        raise HTTPException(400, "Nothing to export -- add at least one bullet.")
+        raise HTTPException(400, "Nothing to export -- add at least one item.")
 
     if body.format == "docx":
-        content = build_docx(body.title, body.bullets)
+        content = build_docx(body.title, body.bullets, body.style)
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        filename = "tailored_resume.docx"
+        filename = "cover_letter.docx" if body.style == "letter" else "tailored_resume.docx"
     elif body.format == "pdf":
-        content = build_pdf(body.title, body.bullets)
+        content = build_pdf(body.title, body.bullets, body.style)
         media_type = "application/pdf"
-        filename = "tailored_resume.pdf"
+        filename = "cover_letter.pdf" if body.style == "letter" else "tailored_resume.pdf"
     else:
         raise HTTPException(400, "format must be 'docx' or 'pdf'")
 
