@@ -99,11 +99,14 @@ def _call_openai(user_prompt: str) -> str:
 
 
 def analyze_with_llm(resume_text: str, jd_text: str, missing_skills: list[str]) -> dict:
+    import logging
+    logger = logging.getLogger("resume_analyzer")
+
     user_prompt = _build_user_prompt(resume_text, jd_text, missing_skills)
 
     raw = None
     used_provider = None
-    last_error = None
+    errors = {}
 
     # Gemini first (free tier), OpenAI as the fallback if Gemini fails.
     for provider_name, call_fn in (("gemini", _call_gemini), ("openai", _call_openai)):
@@ -112,14 +115,14 @@ def analyze_with_llm(resume_text: str, jd_text: str, missing_skills: list[str]) 
             used_provider = provider_name
             break
         except Exception as e:
-            last_error = e
+            errors[provider_name] = str(e)
+            logger.warning(f"{provider_name} call failed: {e}")
             continue
 
     if raw is None:
-        # Both providers failed -- surface a clear error to main.py, which
-        # already has a fallback that keeps the deterministic match results
-        # useful even when the AI layer is fully down.
-        raise RuntimeError(f"Both AI providers failed. Last error: {last_error}")
+        # Both providers failed -- log each one's specific error (not just
+        # the last), then raise a combined error for main.py's fallback.
+        raise RuntimeError(f"Both AI providers failed. Errors: {errors}")
 
     data = json.loads(raw)
     data["ai_provider_used"] = used_provider  # handy for debugging in the UI/logs
