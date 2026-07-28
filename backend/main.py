@@ -5,6 +5,8 @@ No accounts, no persistence by default (per the earlier decision to skip
 auth for v1) -- upload, analyze, edit, download, done. Everything is
 processed in memory per-request.
 """
+import logging
+
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -18,6 +20,9 @@ from file_parsing import parse_resume
 from analysis import compute_match
 from ai import analyze_with_llm
 from export import build_docx, build_pdf
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("resume_analyzer")
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Resume Analyzer API")
@@ -43,6 +48,21 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/health/ai")
+def health_ai():
+    """
+    Confirms which AI provider keys Render can actually see, WITHOUT ever
+    exposing the key values -- just true/false. Visit this in a browser
+    to sanity-check your environment variables are set correctly before
+    assuming the AI code itself is broken.
+    """
+    import os
+    return {
+        "gemini_key_present": bool(os.environ.get("GEMINI_API_KEY")),
+        "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
+    }
+
+
 @app.post("/analyze")
 @limiter.limit("5/2hours")
 async def analyze(
@@ -65,9 +85,10 @@ async def analyze(
         ai_result = analyze_with_llm(
             resume_text, job_description, match_result["missing_skills"]
         )
-    except Exception:
-        # Keep the deterministic match results useful even if the LLM
-        # call fails (rate limit, bad API key, network blip, etc.)
+    except Exception as e:
+        # Logged here so it's visible in Render's Logs tab -- the user
+        # only ever sees the clean message below, never the raw error.
+        logger.exception(f"AI call failed: {e}")
         ai_result = {
             "tailored_bullets": [],
             "suggestions": ["AI suggestions are temporarily unavailable -- try again shortly."],
