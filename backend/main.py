@@ -24,10 +24,10 @@ app = FastAPI(title="Resume Analyzer API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Lock this down to your real Netlify domain before going live.
+# Locked down to the actual deployed frontend -- no longer a wildcard.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://myresumeanalyze.netlify.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
