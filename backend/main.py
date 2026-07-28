@@ -20,8 +20,9 @@ from file_parsing import parse_resume
 from analysis import compute_match
 from resume_strength import check_resume_strength
 from ats_check import check_ats_formatting
-from ai import analyze_with_llm, generate_cover_letter
+from ai import analyze_with_llm, generate_cover_letter, generate_full_cv
 from export import build_docx, build_pdf
+from cv_export import build_cv_docx, build_cv_pdf
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("resume_analyzer")
@@ -161,6 +162,67 @@ async def cover_letter(
         raise HTTPException(503, "Cover letter generation is temporarily unavailable -- try again shortly.")
 
     return JSONResponse(result)
+
+
+@app.post("/tailor-cv")
+@limiter.limit("5/2hours")
+async def tailor_cv(
+    request: Request,
+    resume: UploadFile = File(...),
+    job_description: str = Form(...),
+):
+    """
+    The bigger sibling of /analyze's bullet-tailoring: reorganizes the
+    ENTIRE resume into a clean, tailored CV structure (see ai.py's
+    FULL_CV_SYSTEM_PROMPT for the exact guardrails). Returns structured
+    JSON -- name, contact, summary, experience entries, education,
+    skills -- for the frontend to render as an editable form.
+    """
+    if not job_description or len(job_description.strip()) < 20:
+        raise HTTPException(400, "Please paste a fuller job description.")
+
+    file_bytes = await resume.read()
+    try:
+        resume_text = parse_resume(resume.filename, file_bytes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    try:
+        cv_data = generate_full_cv(resume_text, job_description)
+    except Exception as e:
+        logger.exception(f"Full CV rewrite AI call failed: {e}")
+        raise HTTPException(503, "CV rewriting is temporarily unavailable -- try again shortly.")
+
+    return JSONResponse(cv_data)
+
+
+class CvExportRequest(BaseModel):
+    cv: dict
+    format: str  # "docx" or "pdf"
+
+
+@app.post("/export-cv")
+@limiter.limit("20/2hours")
+async def export_cv(request: Request, body: CvExportRequest):
+    if not body.cv:
+        raise HTTPException(400, "Nothing to export.")
+
+    if body.format == "docx":
+        content = build_cv_docx(body.cv)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = "tailored_cv.docx"
+    elif body.format == "pdf":
+        content = build_cv_pdf(body.cv)
+        media_type = "application/pdf"
+        filename = "tailored_cv.pdf"
+    else:
+        raise HTTPException(400, "format must be 'docx' or 'pdf'")
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class ExportRequest(BaseModel):

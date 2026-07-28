@@ -157,6 +157,56 @@ weighted toward the missing skills above."""
     return data
 
 
+FULL_CV_SYSTEM_PROMPT = f"""You are a careful CV-rewriting assistant. You \
+reorganize a candidate's REAL resume content into a clean, tailored CV \
+structure for a specific job description. You must follow these rules \
+strictly:
+
+1. {NEVER_INVENT_RULE}
+2. NEVER add a job, employer, title, date range, degree, or credential \
+that isn't already in the original resume text. If contact information \
+(email, phone, location, LinkedIn) isn't present in the original, leave \
+that field as an empty string rather than inventing one.
+3. Reword summaries and bullet points to align with the job description's \
+language and emphasize the most relevant real experience -- but every \
+fact must trace back to the original resume.
+4. Respond with ONLY valid JSON, no markdown fences, no commentary, \
+matching exactly this shape:
+{{
+  "full_name": "string or empty",
+  "contact_line": "string or empty (e.g. email | phone | city)",
+  "summary": "2-3 sentence tailored professional summary",
+  "experience": [
+    {{"title": "string", "organization": "string", "dates": "string", "bullets": ["string", ...]}}
+  ],
+  "education": [
+    {{"degree": "string", "institution": "string", "dates": "string"}}
+  ],
+  "skills": ["string", ...]
+}}
+"""
+
+
+def generate_full_cv(resume_text: str, jd_text: str) -> dict:
+    user_prompt = f"""RESUME TEXT:
+{resume_text}
+
+JOB DESCRIPTION:
+{jd_text}
+
+Reorganize this resume's REAL content into the tailored CV structure \
+above. Reword the summary and bullets to align with the job description's \
+language and priorities, but do not add any employer, title, date, degree, \
+or skill that isn't genuinely present in the original resume text."""
+
+    data = _call_llm_with_fallback(FULL_CV_SYSTEM_PROMPT, user_prompt)
+
+    data["summary"] = enforce_dash_style(data.get("summary", ""))
+    for exp in data.get("experience", []):
+        exp["bullets"] = [enforce_dash_style(b) for b in exp.get("bullets", [])]
+    return data
+
+
 def generate_cover_letter(resume_text: str, jd_text: str) -> dict:
     user_prompt = f"""RESUME TEXT:
 {resume_text}
