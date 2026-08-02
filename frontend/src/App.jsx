@@ -433,7 +433,7 @@ export default function App() {
             {loading ? "Analyzing..." : "Analyze my resume"}
           </button>
           <p className="text-xs text-ink/40">
-            Limited to 5 analyses per 2 hours per network to keep this demo available for everyone.
+            Limited to 100 analyses per day per network -- just a backstop against bots, not a real cap for normal use.
           </p>
         </form>
 
