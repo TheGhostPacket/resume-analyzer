@@ -67,7 +67,7 @@ def health_ai():
 
 
 @app.post("/check-strength")
-@limiter.limit("10/2hours")
+@limiter.limit("100/day")
 async def check_strength(request: Request, resume: UploadFile = File(...)):
     """
     Stands entirely on its own -- no job description needed. Flags weak,
@@ -87,7 +87,7 @@ async def check_strength(request: Request, resume: UploadFile = File(...)):
 
 
 @app.post("/check-ats")
-@limiter.limit("10/2hours")
+@limiter.limit("100/day")
 async def check_ats(request: Request, resume: UploadFile = File(...)):
     """
     Also stands entirely on its own -- inspects the FILE STRUCTURE (not
@@ -101,7 +101,7 @@ async def check_ats(request: Request, resume: UploadFile = File(...)):
 
 
 @app.post("/analyze")
-@limiter.limit("5/2hours")
+@limiter.limit("100/day")
 async def analyze(
     request: Request,
     resume: UploadFile = File(...),
@@ -140,7 +140,7 @@ async def analyze(
 
 
 @app.post("/cover-letter")
-@limiter.limit("5/2hours")
+@limiter.limit("100/day")
 async def cover_letter(
     request: Request,
     resume: UploadFile = File(...),
@@ -165,7 +165,7 @@ async def cover_letter(
 
 
 @app.post("/tailor-cv")
-@limiter.limit("5/2hours")
+@limiter.limit("100/day")
 async def tailor_cv(
     request: Request,
     resume: UploadFile = File(...),
@@ -202,7 +202,7 @@ class CvExportRequest(BaseModel):
 
 
 @app.post("/export-cv")
-@limiter.limit("20/2hours")
+@limiter.limit("300/day")
 async def export_cv(request: Request, body: CvExportRequest):
     if not body.cv:
         raise HTTPException(400, "Nothing to export.")
@@ -233,7 +233,7 @@ class ExportRequest(BaseModel):
 
 
 @app.post("/export")
-@limiter.limit("20/2hours")
+@limiter.limit("300/day")
 async def export(request: Request, body: ExportRequest):
     if not body.bullets:
         raise HTTPException(400, "Nothing to export -- add at least one item.")
