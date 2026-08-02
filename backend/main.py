@@ -35,7 +35,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Locked down to the actual deployed frontend -- no longer a wildcard.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://myresumeanalyze.netlify.app"],
+    allow_origins=["https://myresumeanalyze.netlify.app", "https://ghassa.com"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
